@@ -9,7 +9,7 @@ int PWM_Value = 10;
 unsigned long Capacity = 0;
 unsigned long time_counter = 0;
 unsigned long time_offset;
-unsigned int starting_capacity = 0;
+int starting_capacity = 0;
 float Vcc = 5.021 ; // Voltage of Arduino 5V pin ( Measured by Multimeter )
 float BAT_Voltage = 0;
 float sample = 0;
@@ -28,7 +28,7 @@ bool encoder_A, encoder_B, encoder_C;
 bool encoder_A_prev = 0;
 char encoder_value = 0;
 bool encoder_changed = 0;
-bool encoder_pressed = 1;
+bool encoder_pressed = 0;
 
 void setupTimer2() 
 {
@@ -53,7 +53,7 @@ ISR(TIMER2_COMPA_vect)
 {
   encoder_A = digitalRead(encoder_pin_A);    // Read encoder pins
   encoder_B = digitalRead(encoder_pin_B);
-  encoder_C = digitalRead(encoder_pin_C);
+  encoder_C = !digitalRead(encoder_pin_C);
   if ((!encoder_A) && (encoder_A_prev)) {
     // A has gone from high to low
     if (encoder_B) {
@@ -70,7 +70,7 @@ ISR(TIMER2_COMPA_vect)
     }
   }
   encoder_A_prev = encoder_A;     // Store value of A for next time
-  if (encoder_C) encoder_pressed = 1;
+  if (encoder_C) encoder_pressed = 1; else encoder_pressed = 0;
 }
 
 bool check_if_charged()
@@ -174,11 +174,11 @@ void loop()
 
       if (encoder_pressed)
       {
-        encoder_changed = 0;
+        encoder_changed = 1;
         lcd.clear();
         State = 1;
         Step = 0;
-        encoder_value = 0;
+        encoder_value = 6;
         delay(750);
       }
       break;
@@ -208,6 +208,7 @@ void loop()
       }
       if (encoder_pressed)
       {
+        encoder_changed = 1;
         lcd.clear();
         State = 2;
         Step = 0;
@@ -219,10 +220,20 @@ void loop()
     case 2:
       lcd.setCursor(0, 0);
       lcd.print("Start capacity:");
-      if (encoder_changed && starting_capacity > 0 && starting_capacity < 3600)
+      if (encoder_changed)
       {
         encoder_changed = 0;
-        starting_capacity = encoder_value * 10;
+        starting_capacity = encoder_value * 50;
+        if (starting_capacity < 0) 
+        {
+          starting_capacity = 0;
+          encoder_value=0;
+        }
+        if (starting_capacity > 3600) 
+        {
+          starting_capacity = 3600;
+          encoder_value--;
+        }
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Start capacity:");
@@ -231,6 +242,7 @@ void loop()
       }
       if (encoder_pressed)
       {
+        encoder_changed = 1;
         lcd.clear();
         State = 3;
         Step = 0;
@@ -242,10 +254,20 @@ void loop()
     case 3:
       lcd.setCursor(0, 0);
       lcd.print("Low BAT level");
-      if (encoder_changed && Low_BAT_level > 3.05 && Low_BAT_level < 3.55)
+      if (encoder_changed)
       {
         encoder_changed = 0;
-        Low_BAT_level = 3.05 + encoder_value * 0.01;
+        Low_BAT_level = 3.20 + encoder_value * 0.01;
+        if (Low_BAT_level < 3.00) 
+        {
+          Low_BAT_level = 3.00;
+          encoder_value++;
+        }
+        if (Low_BAT_level > 3.40) 
+        {
+          Low_BAT_level = 3.40;
+          encoder_value--;
+        }
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Low BAT level");
@@ -254,6 +276,7 @@ void loop()
       }
       if (encoder_pressed)
       {
+        encoder_changed = 1;
         lcd.clear();
         State = 4;
         Step = 0;
@@ -265,10 +288,20 @@ void loop()
     case 4:
       lcd.setCursor(0, 0);
       lcd.print("Store BAT level");
-      if (encoder_changed && Sto_BAT_level > 3.05 && Sto_BAT_level < 4.15)
+      if (encoder_changed)
       {
         encoder_changed = 0;
-        Sto_BAT_level = 3.05 + encoder_value * 0.01;
+        Sto_BAT_level = 3.75 + encoder_value * 0.01;
+        if (Sto_BAT_level < 3.00) 
+        {
+          Sto_BAT_level = 3.00;
+          encoder_value++;
+        }
+        if (Sto_BAT_level > 4.00) 
+        {
+          Sto_BAT_level = 4.00;
+          encoder_value--;
+        }
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Store BAT level");
@@ -277,6 +310,7 @@ void loop()
       }
       if (encoder_pressed)
       {
+        encoder_changed = 1;
         lcd.clear();
         State = 5;
         Step = 0;

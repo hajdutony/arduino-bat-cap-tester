@@ -1,18 +1,24 @@
 #include <LiquidCrystal_I2C.h>
 
+#define shunt_resistor 1.78
+
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 const int Current [] = {6, 94, 182, 270, 360, 440, 530, 610, 690, 775, 830};
-const byte PWM_Pin = 11;
+const byte PWM_Pin = 10;
+const byte Charge_Pin = 11;
 const byte Relay = 12;
 const int BAT_Pin = A2;
-int PWM_Value = 10;
+const int resistor_voltage_pin = A1;
+int PWM_Value = 1;
 unsigned long Capacity = 0;
 unsigned long time_counter = 0;
 unsigned long time_offset;
 int starting_capacity = 0;
-float Vcc = 5.021 ; // Voltage of Arduino 5V pin ( Measured by Multimeter )
+float Vcc = 5.05 ; // Voltage of Arduino 5V pin ( Measured by Multimeter )
 float BAT_Voltage = 0;
+unsigned int resistor_current;
 float sample = 0;
+float sample2 = 0;
 char charBuffer[8];
 byte State = 0;
 byte Step = 0;
@@ -75,16 +81,7 @@ ISR(TIMER2_COMPA_vect)
 
 bool check_if_charged()
 {
-  //get the voltage while not charging
-  digitalWrite(Relay, HIGH);
-  delay(500);
-  float not_charging_voltage = measure_battery_voltage(BAT_Pin);
-  //get the voltage while charging
-  digitalWrite(Relay, LOW);
-  delay(500);
-  float charging_voltage = measure_battery_voltage(BAT_Pin);
-  //if same, then true
-  if (charging_voltage - not_charging_voltage < 0.02)
+  if (digitalRead(Charge_Pin))
   {
     return true;
   }
@@ -114,6 +111,7 @@ bool check_if_storage_reached()
 
 float measure_battery_voltage(byte pin)
 {
+  sample = 0;
   for (int i = 0; i < 100; i++)
   {
     sample = sample + analogRead(pin); //read the Battery voltage
@@ -122,6 +120,18 @@ float measure_battery_voltage(byte pin)
   sample = sample / 100;
   BAT_Voltage = sample * Vcc / 1024.0;
   return BAT_Voltage;
+}
+
+unsigned int measure_resistor_current(byte pin)
+{
+  sample2 = 0;
+  for (int i = 0; i < 10; i++)
+  {
+    sample2 = sample2 + analogRead(pin); //read the resistor voltage
+    delay (1);
+  }
+  sample2 = sample2 / 10;
+  return sample2 * Vcc / 1024.0 / shunt_resistor * 1000;
 }
 
 void reset_clock()
@@ -139,6 +149,7 @@ void setup ()
   pinMode (encoder_pin_A, INPUT);
   pinMode (encoder_pin_B, INPUT);
   pinMode (encoder_pin_C, INPUT);
+  pinMode (Charge_Pin, INPUT);
   setupTimer2();
   pinMode(PWM_Pin, OUTPUT);
   pinMode(Relay, OUTPUT);
@@ -178,7 +189,8 @@ void loop()
         lcd.clear();
         State = 1;
         Step = 0;
-        encoder_value = 6;
+        encoder_value = 1;
+        resistor_current = measure_resistor_current(resistor_voltage_pin);
         delay(750);
       }
       break;
@@ -186,25 +198,25 @@ void loop()
     case 1:
       lcd.setCursor(0, 0);
       lcd.print("I discharge:");
+      delay(50);
+      resistor_current = measure_resistor_current(resistor_voltage_pin);
+      lcd.setCursor(0, 1);
+      lcd.print(" = " + String(resistor_current) + "mA");
       if (encoder_changed)
       {
         encoder_changed = 0;
-        PWM_Value = encoder_value * 10;
+        PWM_Value = encoder_value;
         if (PWM_Value < 0) 
         {
           PWM_Value = 0;
           encoder_value++;
         }
-        if (PWM_Value > 100) 
+        if (PWM_Value > 81) 
         {
-          PWM_Value = 100;
+          PWM_Value = 81;
           encoder_value--;
         }
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("I discharge:");
-        lcd.setCursor(0, 1);
-        lcd.print(" = " + String(Current[PWM_Value / 10]) + "mA");
+        analogWrite(PWM_Pin, PWM_Value);
       }
       if (encoder_pressed)
       {
@@ -342,6 +354,7 @@ void loop()
           if (starting_capacity == 0)
           {
             digitalWrite(Relay, LOW);
+            lcd.clear();
             State = 6;
             Step = 0;
             encoder_value = 0;
@@ -350,6 +363,7 @@ void loop()
           else
           {
             digitalWrite(Relay, HIGH);
+            lcd.clear();
             State = 7;
             Step = 0;
             encoder_value = 0;
@@ -392,6 +406,7 @@ void loop()
       break;
 
     case 7:
+      resistor_current = measure_resistor_current(resistor_voltage_pin);
       BAT_Voltage = measure_battery_voltage(BAT_Pin);
       lcd.setCursor(0, 0);
       if (time_counter / 3600 < 10)
@@ -418,17 +433,17 @@ void loop()
       {
         lcd.print(String(time_counter % 60));
       }
-
       lcd.setCursor(9, 0);
-      lcd.print(String(Current[PWM_Value / 10]) + "mA");
+      lcd.print(String(resistor_current) + "mA");
 
       lcd.setCursor(0, 1);
       lcd.print(String(BAT_Voltage) + "V" );
 
       lcd.setCursor(9, 1);
 
-      Capacity = starting_capacity + (time_counter * Current[PWM_Value / 10] / 3600);
+      Capacity = starting_capacity + (time_counter * resistor_current / 3600);
       lcd.print(String(Capacity) + "mAh");
+      delay(50);
       if (BAT_Voltage < Low_BAT_level)
       {
         lcd.clear();

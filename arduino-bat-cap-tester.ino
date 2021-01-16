@@ -3,16 +3,17 @@
 #define shunt_resistor 1.78
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-const int Current [] = {6, 94, 182, 270, 360, 440, 530, 610, 690, 775, 830};
+// const int Current [] = {6, 94, 182, 270, 360, 440, 530, 610, 690, 775, 830};
 const byte PWM_Pin = 10;
 const byte Charge_Pin = 11;
 const byte Relay = 12;
 const int BAT_Pin = A2;
 const int resistor_voltage_pin = A1;
 int PWM_Value = 1;
-unsigned long Capacity = 0;
+float Capacity = 0;
 unsigned long time_counter = 0;
 unsigned long time_offset;
+unsigned long Old_second = 0;
 int starting_capacity = 0;
 float Vcc = 5.05 ; // Voltage of Arduino 5V pin ( Measured by Multimeter )
 float BAT_Voltage = 0;
@@ -254,6 +255,7 @@ void loop()
       }
       if (encoder_pressed)
       {
+        Capacity = starting_capacity;
         encoder_changed = 1;
         lcd.clear();
         State = 3;
@@ -406,44 +408,49 @@ void loop()
       break;
 
     case 7:
-      resistor_current = measure_resistor_current(resistor_voltage_pin);
-      BAT_Voltage = measure_battery_voltage(BAT_Pin);
-      lcd.setCursor(0, 0);
-      if (time_counter / 3600 < 10)
+      if (Old_second != time_counter)
       {
-        lcd.print("0" + String(time_counter / 3600) + ":");
-      }
-      else
-      {
-        lcd.print(String(time_counter / 3600) + ":");
-      }
-      if (time_counter / 60 < 10)
-      {
-        lcd.print("0" + String((time_counter % 3600) / 60) + ":");
-      }
-      else
-      {
-        lcd.print(String((time_counter % 3600) / 60) + ":");
-      }
-      if (time_counter % 60 < 10)
-      {
-        lcd.print("0" + String(time_counter % 60));
-      }
-      else
-      {
-        lcd.print(String(time_counter % 60));
-      }
-      lcd.setCursor(9, 0);
-      lcd.print(String(resistor_current) + "mA");
+        resistor_current = measure_resistor_current(resistor_voltage_pin);
+        BAT_Voltage = measure_battery_voltage(BAT_Pin);
+        lcd.setCursor(0, 0);
+        if (time_counter / 3600 < 10)
+        {
+          lcd.print("0" + String(time_counter / 3600) + ":");
+        }
+        else
+        {
+          lcd.print(String(time_counter / 3600) + ":");
+        }
+        if ((time_counter % 3600) / 60 < 10)
+        {
+          lcd.print("0" + String((time_counter % 3600) / 60) + ":");
+        }
+        else
+        {
+          lcd.print(String((time_counter % 3600) / 60) + ":");
+        }
+        if (time_counter % 60 < 10)
+        {
+          lcd.print("0" + String(time_counter % 60));
+        }
+        else
+        {
+          lcd.print(String(time_counter % 60));
+        }
+        lcd.setCursor(9, 0);
+        lcd.print(String(resistor_current) + "mA");
 
-      lcd.setCursor(0, 1);
-      lcd.print(String(BAT_Voltage) + "V" );
+        lcd.setCursor(0, 1);
+        lcd.print(String(BAT_Voltage) + "V" );
 
-      lcd.setCursor(9, 1);
-
-      Capacity = starting_capacity + (time_counter * resistor_current / 3600);
-      lcd.print(String(Capacity) + "mAh");
-      delay(50);
+        lcd.setCursor(6, 1);
+      
+        Capacity += ((float)resistor_current / 3600);
+        lcd.print(String(Capacity) + "mAh");
+        delay(50);
+        Old_second = time_counter;
+      }
+      
       if (BAT_Voltage < Low_BAT_level)
       {
         lcd.clear();
